@@ -4,6 +4,7 @@ package buildx.controller.v1;
 
 import "github.com/moby/buildkit/api/services/control/control.proto";
 import "github.com/moby/buildkit/sourcepolicy/pb/policy.proto";
+import "github.com/moby/buildkit/solver/pb/ops.proto";
 
 option go_package = "pb";
 
@@ -18,6 +19,7 @@ service Controller {
   rpc Info(InfoRequest) returns (InfoResponse);
   rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
   rpc DisconnectProcess(DisconnectProcessRequest) returns (DisconnectProcessResponse);
+  rpc Solve(SolveRequest) returns (SolveResponse);
 }
 
 message ListProcessesRequest {
@@ -79,6 +81,8 @@ message BuildOptions {
   moby.buildkit.v1.sourcepolicy.Policy SourcePolicy = 28;
   string Ref = 29;
   string GroupRef = 30;
+
+  bool Debug = 31;
 }
 
 message ExportEntry {
@@ -120,6 +124,8 @@ message InspectRequest {
 
 message InspectResponse {
   BuildOptions Options = 1;
+  pb.Definition Definition = 2;
+  pb.Definition CurrentDefinition = 3;
 }
 
 message UlimitOpt {
@@ -245,3 +251,10 @@ message BuildxVersion {
   string version = 2;
   string revision = 3;
 }
+
+message SolveRequest {
+  string Ref = 1;
+  pb.Definition Target = 2;
+}
+
+message SolveResponse {}

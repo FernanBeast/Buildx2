@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	controllerapi "github.com/docker/buildx/controller/pb"
+	"github.com/docker/buildx/util/progress"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
@@ -28,7 +29,7 @@ import (
 // failures and successes.
 //
 // If the returned ResultHandle is not nil, the caller must call Done() on it.
-func NewResultHandle(ctx context.Context, cc *client.Client, opt client.SolveOpt, product string, buildFunc gateway.BuildFunc, ch chan *client.SolveStatus) (*ResultHandle, *client.SolveResponse, error) {
+func NewResultHandle(ctx context.Context, cc *client.Client, opt client.SolveOpt, product string, buildFunc gateway.BuildFunc, ch chan *client.SolveStatus, noEval bool) (*ResultHandle, *client.SolveResponse, error) {
 	// Create a new context to wrap the original, and cancel it when the
 	// caller-provided context is cancelled.
 	//
@@ -85,19 +86,43 @@ func NewResultHandle(ctx context.Context, cc *client.Client, opt client.SolveOpt
 		defer cancel(context.Canceled) // ensure no dangling processes
 
 		var res *gateway.Result
+		var singleDef *pb.Definition
 		var err error
 		resp, err = cc.Build(ctx, opt, product, func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 			var err error
 			res, err = buildFunc(ctx, c)
 
 			if res != nil && err == nil {
-				// Force evaluation of the build result (otherwise, we likely
-				// won't get a solve error)
-				def, err2 := getDefinition(ctx, res)
-				if err2 != nil {
-					return nil, err2
+				var defErr error
+				singleDef, defErr = getSingleDefinition(ctx, res) // TODO: support multi-platform
+				if defErr != nil {
+					return nil, defErr
 				}
-				res, err = evalDefinition(ctx, c, def)
+				if noEval {
+					respHandle = &ResultHandle{
+						client:   cc,
+						solveOpt: opt,
+						def:      singleDef,
+						done:     make(chan struct{}),
+						gwClient: c,
+						gwCtx:    ctx,
+					}
+					close(done)
+
+					// Block until the caller closes the ResultHandle.
+					select {
+					case <-respHandle.done:
+					case <-ctx.Done():
+					}
+				} else {
+					// Force evaluation of the build result (otherwise, we likely
+					// won't get a solve error)
+					def, err2 := getDefinition(ctx, res)
+					if err2 != nil {
+						return nil, err2
+					}
+					res, err = evalDefinition(ctx, c, def)
+				}
 			}
 
 			if err != nil {
@@ -112,6 +137,9 @@ func NewResultHandle(ctx context.Context, cc *client.Client, opt client.SolveOpt
 				var se *errdefs.SolveError
 				if errors.As(err, &se) {
 					respHandle = &ResultHandle{
+						client:   cc,
+						solveOpt: opt,
+						def:      singleDef,
 						done:     make(chan struct{}),
 						solveErr: se,
 						gwClient: c,
@@ -169,6 +197,9 @@ func NewResultHandle(ctx context.Context, cc *client.Client, opt client.SolveOpt
 				return nil, errors.Wrap(err, "inconsistent solve result")
 			}
 			respHandle = &ResultHandle{
+				client:   cc,
+				solveOpt: opt,
+				def:      singleDef,
 				done:     make(chan struct{}),
 				res:      res,
 				gwClient: c,
@@ -251,8 +282,51 @@ func evalDefinition(ctx context.Context, c gateway.Client, defs *result.Result[*
 	return res, nil
 }
 
+func getSingleDefinition(ctx context.Context, res *gateway.Result) (*pb.Definition, error) {
+	defs, err := getDefinition(ctx, res)
+	if err != nil {
+		return nil, err
+	}
+	ps, err := exptypes.ParsePlatforms(res.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	def, ok := defs.FindRef(ps.Platforms[0].ID)
+	if !ok {
+		return nil, errors.Errorf("no reference found")
+	}
+	return def, nil
+}
+
+func DefinitionFromResultHandler(ctx context.Context, res *ResultHandle) (*pb.Definition, error) {
+	if res.def != nil {
+		return res.def, nil
+	}
+	return nil, errors.Errorf("result context doesn't contain build definition")
+}
+
+func SolveWithResultHandler(ctx context.Context, product string, resultCtx *ResultHandle, target *pb.Definition, pw progress.Writer) (*ResultHandle, error) {
+	opt := resultCtx.solveOpt
+	opt.Ref = ""
+	opt.Exports = nil
+	opt.CacheExports = nil
+	ch, done := progress.NewChannel(pw)
+	defer func() { <-done }()
+	h, _, err := NewResultHandle(ctx, resultCtx.client, opt, product, func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		return c.Solve(ctx, gateway.SolveRequest{
+			Evaluate:   true,
+			Definition: target,
+		})
+	}, ch, false)
+	return h, err
+}
+
 // ResultHandle is a build result with the client that built it.
 type ResultHandle struct {
+	client   *client.Client
+	solveOpt client.SolveOpt
+	def      *pb.Definition
+
 	res      *gateway.Result
 	solveErr *errdefs.SolveError
 
@@ -279,6 +353,10 @@ func (r *ResultHandle) Done() {
 		close(r.done)
 		<-r.gwCtx.Done()
 	})
+}
+
+func (r *ResultHandle) SolveError() *errdefs.SolveError {
+	return r.solveErr
 }
 
 func (r *ResultHandle) registerCleanup(f func()) {

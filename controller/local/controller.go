@@ -15,6 +15,7 @@ import (
 	"github.com/docker/buildx/util/progress"
 	"github.com/docker/cli/cli/command"
 	"github.com/moby/buildkit/client"
+	solverpb "github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
 )
 
@@ -40,6 +41,8 @@ type localController struct {
 	processes   *processes.Manager
 
 	buildOnGoing atomic.Bool
+
+	originalResult *build.ResultHandle
 }
 
 func (b *localController) Build(ctx context.Context, options controllerapi.BuildOptions, in io.ReadCloser, progress progress.Writer) (string, *client.SolveResponse, error) {
@@ -55,6 +58,7 @@ func (b *localController) Build(ctx context.Context, options controllerapi.Build
 			resultCtx:    res,
 			buildOptions: &options,
 		}
+		b.originalResult = res
 		if buildErr != nil {
 			buildErr = controllererrors.WrapBuild(buildErr, b.ref)
 		}
@@ -142,5 +146,30 @@ func (b *localController) Inspect(ctx context.Context, ref string) (*controllera
 	if ref != b.ref {
 		return nil, errors.Errorf("unknown ref %q", ref)
 	}
-	return &controllerapi.InspectResponse{Options: b.buildConfig.buildOptions}, nil
+	var curDef *solverpb.Definition
+	var origDef *solverpb.Definition
+	if b.buildConfig.resultCtx != nil {
+		curDef, _ = build.DefinitionFromResultHandler(ctx, b.buildConfig.resultCtx)
+	}
+	if b.originalResult != nil {
+		origDef, _ = build.DefinitionFromResultHandler(ctx, b.originalResult)
+	}
+	return &controllerapi.InspectResponse{Options: b.buildConfig.buildOptions, Definition: origDef, CurrentDefinition: curDef}, nil
+}
+
+func (b *localController) Solve(ctx context.Context, ref string, target *solverpb.Definition, progress progress.Writer) error {
+	if ref != b.ref {
+		return errors.Errorf("unknown ref %q", ref)
+	}
+	if b.originalResult == nil {
+		return errors.Errorf("no build has been called")
+	}
+	res, err := build.SolveWithResultHandler(ctx, "buildx", b.originalResult, target, progress)
+	if err == nil {
+		b.buildConfig.resultCtx = res
+		if se := res.SolveError(); se != nil {
+			err = errors.Errorf("failed solve: %v", se)
+		}
+	}
+	return err
 }
