@@ -180,9 +180,6 @@ variable "HTTPS_PROXY" {
 variable "NO_PROXY" {
   default = ""
 }
-variable "TEST_BUILDKIT_TAG" {
-  default = null
-}
 
 target "integration-test-base" {
   inherits = ["_common"]
@@ -190,7 +187,6 @@ target "integration-test-base" {
     HTTP_PROXY = HTTP_PROXY
     HTTPS_PROXY = HTTPS_PROXY
     NO_PROXY = NO_PROXY
-    BUILDKIT_VERSION = TEST_BUILDKIT_TAG
   }
   target = "integration-test-base"
   output = ["type=cacheonly"]
