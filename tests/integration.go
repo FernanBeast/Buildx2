@@ -55,6 +55,9 @@ func buildxCmd(sb integration.Sandbox, opts ...cmdOpt) *exec.Cmd {
 	if context := sb.DockerAddress(); context != "" {
 		cmd.Env = append(cmd.Env, "DOCKER_CONTEXT="+context)
 	}
+	if env := sb.ExtraEnv(); len(env) > 0 {
+		cmd.Env = append(cmd.Env, env...)
+	}
 
 	return cmd
 }
@@ -68,10 +71,37 @@ func dockerCmd(sb integration.Sandbox, opts ...cmdOpt) *exec.Cmd {
 	if context := sb.DockerAddress(); context != "" {
 		cmd.Env = append(cmd.Env, "DOCKER_CONTEXT="+context)
 	}
+	if env := sb.ExtraEnv(); len(env) > 0 {
+		cmd.Env = append(cmd.Env, env...)
+	}
 	return cmd
 }
 
+func isMobyWorker(sb integration.Sandbox) bool {
+	name, _, hasFeature := driverName(sb.Name())
+	return name == "docker" && !hasFeature
+}
+
 func isDockerWorker(sb integration.Sandbox) bool {
-	sbDriver, _, _ := strings.Cut(sb.Name(), "+")
-	return sbDriver == "docker"
+	name, _, _ := driverName(sb.Name())
+	return name == "docker"
+}
+
+func isDockerContainerWorker(sb integration.Sandbox) bool {
+	name, _, _ := driverName(sb.Name())
+	return name == "docker-container"
+}
+
+func driverName(sbName string) (string, bool, bool) {
+	name := sbName
+	var hasVersion, hasFeature bool
+	if b, _, ok := strings.Cut(sbName, "@"); ok {
+		name = b
+		hasVersion = true
+	}
+	if b, _, ok := strings.Cut(name, "+"); ok {
+		name = b
+		hasFeature = true
+	}
+	return name, hasVersion, hasFeature
 }

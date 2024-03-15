@@ -67,10 +67,12 @@ jobs:
       fail-fast: false
       matrix:
         worker:
-          - docker
-          - docker\+containerd  # same as docker, but with containerd snapshotter
-          - docker-container
-          - remote
+          - "docker"
+          - "docker+containerd"  # same as docker, but with containerd snapshotter
+          - "docker@25.0"
+          - "docker+containerd@25.0"
+          - "docker-container"
+          - "remote"
         pkg:
           - ./tests
     steps:
@@ -78,6 +80,18 @@ jobs:
         name: Prepare
         run: |
           echo "TESTREPORTS_NAME=${{ github.job }}-$(echo "${{ matrix.pkg }}-${{ matrix.worker }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          testFlags="--run=//worker=$(echo "${{ matrix.worker }}" | sed 's/\+/\\+/g')$"
+          case "${{ matrix.worker }}" in
+            docker | docker+containerd | docker@* | docker+containerd@*)
+              echo "TESTFLAGS=${{ env.TESTFLAGS_DOCKER }} $testFlags" >> $GITHUB_ENV
+              ;;
+            *)
+              echo "TESTFLAGS=${{ env.TESTFLAGS }} $testFlags" >> $GITHUB_ENV
+              ;;
+          esac
+          if [[ "${{ matrix.worker }}" == "docker"* ]]; then
+            echo "TEST_DOCKERD=1" >> $GITHUB_ENV
+          fi
       -
         name: Checkout
         uses: actions/checkout@v4
@@ -107,8 +121,6 @@ jobs:
           ./hack/test
         env:
           TEST_REPORT_SUFFIX: "-${{ env.TESTREPORTS_NAME }}"
-          TEST_DOCKERD: "${{ startsWith(matrix.worker, 'docker') && '1' || '0' }}"
-          TESTFLAGS: "${{ (matrix.worker == 'docker' || matrix.worker == 'docker\\+containerd') && env.TESTFLAGS_DOCKER || env.TESTFLAGS }} --run=//worker=${{ matrix.worker }}$"
           TESTPKGS: "${{ matrix.pkg }}"
       -
         name: Send to Codecov
