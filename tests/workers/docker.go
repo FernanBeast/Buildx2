@@ -24,7 +24,8 @@ func InitDockerWorker() {
 type dockerWorker struct {
 	id                    string
 	containerdSnapshotter bool
-	unsupported           []string
+
+	unsupported []string
 }
 
 func (c dockerWorker) Name() string {
