@@ -10,12 +10,14 @@ ARG GOTESTSUM_VERSION=v1.9.0
 ARG REGISTRY_VERSION=2.8.0
 ARG BUILDKIT_VERSION=v0.14.1
 ARG UNDOCK_VERSION=0.7.0
+ARG K3S_VERSION=v1.21.2-k3s1
 
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS golatest
 FROM moby/moby-bin:$DOCKER_VERSION AS docker-engine
 FROM dockereng/cli-bin:$DOCKER_CLI_VERSION AS docker-cli
 FROM registry:$REGISTRY_VERSION AS registry
+FROM rancher/k3s:${K3S_VERSION} AS k3s
 FROM moby/buildkit:$BUILDKIT_VERSION AS buildkit
 FROM crazymax/undock:$UNDOCK_VERSION AS undock
 
@@ -116,14 +118,45 @@ RUN apk add --no-cache \
       shadow-uidmap \
       xfsprogs \
       xz
+# k3s deps
+RUN apk add --no-cache \
+      busybox-binsh \
+      cni-plugins \
+      cni-plugin-flannel \
+      conntrack-tools \
+      coreutils \
+      dbus \
+      findutils \
+      ipset
+ENV PATH="/usr/libexec/cni:${PATH}"
 COPY --link --from=gotestsum /out /usr/bin/
 COPY --link --from=registry /bin/registry /usr/bin/
 COPY --link --from=docker-engine / /usr/bin/
 COPY --link --from=docker-cli / /usr/bin/
+COPY --link --from=k3s /bin/k3s /usr/bin/
+COPY --link --from=k3s /bin/kubectl /usr/bin/
 COPY --link --from=buildkit /usr/bin/buildkitd /usr/bin/
 COPY --link --from=buildkit /usr/bin/buildctl /usr/bin/
 COPY --link --from=undock /usr/local/bin/undock /usr/bin/
 COPY --link --from=binaries /buildx /usr/bin/
+COPY <<-"EOF" /entrypoint.sh
+#!/bin/sh
+set -e
+# cgroup v2: enable nesting
+# https://github.com/moby/moby/blob/v25.0.0/hack/dind#L59-L69
+if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+  # move the processes from the root group to the /init group,
+  # otherwise writing subtree_control fails with EBUSY.
+  # An error during moving non-existent process (i.e., "cat") is ignored.
+  mkdir -p /sys/fs/cgroup/init
+  xargs -rn1 < /sys/fs/cgroup/cgroup.procs > /sys/fs/cgroup/init/cgroup.procs || :
+  # enable controllers
+  sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers > /sys/fs/cgroup/cgroup.subtree_control
+fi
+exec "$@"
+EOF
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 
 FROM integration-test-base AS integration-test
 COPY . .
