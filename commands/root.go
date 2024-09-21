@@ -126,5 +126,5 @@ func rootFlags(options *rootOptions, flags *pflag.FlagSet) {
 			timeoutDuration = defaultTimeoutCli
 		}
 	}
-	flags.DurationVar(&options.timeout, "timeout", timeoutDuration, "Override the default global timeout (in seconds)")
+	flags.DurationVar(&options.timeout, "timeout", timeoutDuration, "Override the default global timeout (as duration, for example 1m20s)")
 }
