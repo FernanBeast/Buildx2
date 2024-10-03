@@ -106,8 +106,6 @@ type buildOptions struct {
 	control.ControlOptions
 
 	invokeConfig *invokeConfig
-
-	timeout time.Duration
 }
 
 func (o *buildOptions) toControllerOptions() (*controllerapi.BuildOptions, error) {
