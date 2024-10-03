@@ -9,10 +9,11 @@ List builder instances
 
 ### Options
 
-| Name                  | Type     | Default | Description          |
-|:----------------------|:---------|:--------|:---------------------|
-| `-D`, `--debug`       | `bool`   |         | Enable debug logging |
-| [`--format`](#format) | `string` | `table` | Format the output    |
+| Name                  | Type       | Default | Description                                                          |
+|:----------------------|:-----------|:--------|:---------------------------------------------------------------------|
+| `-D`, `--debug`       | `bool`     |         | Enable debug logging                                                 |
+| [`--format`](#format) | `string`   | `table` | Format the output                                                    |
+| `--timeout`           | `duration` | `20s`   | Override the default global timeout (as duration, for example 1m20s) |
 
 
 <!---MARKER_GEN_END-->
