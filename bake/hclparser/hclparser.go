@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/docker/buildx/bake/hclparser/gohcl"
 	"github.com/docker/buildx/util/userfunc"
 	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
@@ -448,7 +448,7 @@ func (p *parser) resolveBlock(block *hcl.Block, target *hcl.BodySchema) (err err
 		}
 
 		// decode!
-		diag = gohcl.DecodeBody(body(), ectx, output.Interface())
+		diag = decodeBody(body(), ectx, output.Interface())
 		if diag.HasErrors() {
 			return diag
 		}
@@ -470,7 +470,7 @@ func (p *parser) resolveBlock(block *hcl.Block, target *hcl.BodySchema) (err err
 		}
 
 		// store the result into the evaluation context (so it can be referenced)
-		outputType, err := gocty.ImpliedType(output.Interface())
+		outputType, err := ImpliedType(output.Interface())
 		if err != nil {
 			return err
 		}
@@ -946,4 +946,9 @@ func key(ks ...any) uint64 {
 		}
 	}
 	return hash.Sum64()
+}
+
+func decodeBody(body hcl.Body, ctx *hcl.EvalContext, val interface{}) hcl.Diagnostics {
+	dec := gohcl.DecodeOptions{ImpliedType: ImpliedType}
+	return dec.DecodeBody(body, ctx, val)
 }
