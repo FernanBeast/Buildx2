@@ -17,6 +17,7 @@ func TestHCLBasic(t *testing.T) {
 		target "db" {
 			context = "./db"
 			tags = ["docker.io/tonistiigi/db"]
+			output = ["type=image"]
 		}
 
 		target "webapp" {
@@ -25,6 +26,9 @@ func TestHCLBasic(t *testing.T) {
 			args = {
 				buildno = "123"
 			}
+			output = [
+				{ type = "image" }
+			]
 		}
 
 		target "cross" {
@@ -595,6 +599,45 @@ func TestHCLAttrsCustomType(t *testing.T) {
 	require.Equal(t, c.Targets[0].Name, "app")
 	require.Equal(t, []string{"linux/arm64", "linux/amd64"}, c.Targets[0].Platforms)
 	require.Equal(t, ptrstr("linux/arm64"), c.Targets[0].Args["v1"])
+}
+
+func TestHCLAttrsCapsuleType(t *testing.T) {
+	dt := []byte(`
+	target "app" {
+		cache-from = [
+			{ type = "registry", ref = "user/app:cache" },
+			{ type = "local", src = "path/to/cache" },
+		]
+
+		cache-to = [
+			{ type = "local", dest = "path/to/cache" },
+		]
+
+		output = [
+			{ type = "oci", dest = "../out.tar" },
+		]
+
+		secret = [
+			{ id = "mysecret", src = "/local/secret" },
+			{ id = "mysecret2", env = "TOKEN" },
+		]
+
+		ssh = [
+			{ id = "default" },
+			{ id = "key", paths = ["path/to/key"] },
+		]
+	}
+	`)
+
+	c, err := ParseFile(dt, "docker-bake.hcl")
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(c.Targets))
+	require.Equal(t, []string{"type=oci,dest=../out.tar"}, stringify(c.Targets[0].Outputs))
+	require.Equal(t, []string{"type=local,src=path/to/cache", "user/app:cache"}, stringify(c.Targets[0].CacheFrom))
+	require.Equal(t, []string{"type=local,dest=path/to/cache"}, stringify(c.Targets[0].CacheTo))
+	require.Equal(t, []string{"id=mysecret,src=/local/secret", "id=mysecret2,env=TOKEN"}, stringify(c.Targets[0].Secrets))
+	require.Equal(t, []string{"default", "key=path/to/key"}, stringify(c.Targets[0].SSH))
 }
 
 func TestHCLMultiFileAttrs(t *testing.T) {
