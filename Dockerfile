@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG GO_VERSION=1.22
+ARG GO_VERSION=1.23
 ARG XX_VERSION=1.5.0
 
 # for testing
@@ -98,6 +98,7 @@ COPY --link --from=buildx-build /usr/bin/docker-buildx /buildx
 FROM binaries-unix AS binaries-darwin
 FROM binaries-unix AS binaries-freebsd
 FROM binaries-unix AS binaries-linux
+FROM binaries-unix AS binaries-openbsd
 
 FROM scratch AS binaries-windows
 COPY --link --from=buildx-build /usr/bin/docker-buildx /buildx.exe
