@@ -1,30 +1,30 @@
 pipeline {
     agent any  // Utiliza un agente genérico; cámbialo si es necesario
+
     environment {
         // Configuración del entorno
         DOCKER_CLI_EXPERIMENTAL = 'enabled'
         IMAGE_NAME = 'mi-imagen'  // Nombre de la imagen Docker
-        DOCKER_REGISTRY = 'mi-registro'  // Nombre del registro Docker (puede ser Docker Hub u otro)
-        DOCKER_TAG = "latest1.0"  // El tag de la imagen (puedes usar otro si lo prefieres)
+        DOCKER_REGISTRY = 'docker.io'  // Registro Docker, puedes usar Docker Hub u otro
+        DOCKER_TAG = "latest1.0"  // El tag de la imagen
     }
-    agent any
+
     stages {
         stage('Preparar Docker Buildx') {
-        stage('Build') {
             steps {
                 script {
                     // Verifica que Docker y Buildx están instalados
                     sh 'docker --version'
                     sh 'docker buildx version'
+
                     // Crea un nuevo builder usando Buildx
                     sh 'docker buildx create --use'
                 }
-                echo 'Building the application...'
-                sh 'ls -la'
+                echo 'Preparando Buildx...'
             }
         }
+
         stage('Construir Imagen') {
-        stage('Test') {
             steps {
                 script {
                     // Construcción de la imagen Docker con soporte multi-plataforma
@@ -32,14 +32,14 @@ pipeline {
                         docker buildx build --platform linux/amd64,linux/arm64 -t $DOCKER_REGISTRY/$IMAGE_NAME:$DOCKER_TAG .
                     """
                 }
-                echo 'Running tests...'
+                echo 'Imagen construida...'
             }
         }
+
         stage('Iniciar Sesión en Docker Registry') {
             steps {
                 script {
                     // Inicia sesión en Docker (solo si es necesario empujar la imagen)
-                    // Se recomienda usar credenciales de Jenkins para esto.
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                         sh """
                             docker login -u \$DOCKER_USERNAME -p \$DOCKER_PASSWORD
@@ -48,11 +48,11 @@ pipeline {
                 }
             }
         }
+
         stage('Empujar Imagen a Registro') {
             when {
                 branch 'main'  // Solo empuja en la rama 'main'
             }
-        stage('Deploy') {
             steps {
                 script {
                     // Empuja la imagen construida al registro Docker
@@ -60,10 +60,17 @@ pipeline {
                         docker push $DOCKER_REGISTRY/$IMAGE_NAME:$DOCKER_TAG
                     """
                 }
-                echo 'Deploying application...'
+                echo 'Imagen empujada al registro...'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo 'Desplegando la aplicación...'
             }
         }
     }
+
     post {
         always {
             // Realiza cualquier acción adicional al finalizar el pipeline
