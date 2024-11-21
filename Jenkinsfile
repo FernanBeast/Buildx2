@@ -39,7 +39,7 @@ pipeline {
                 script {
                     // Inicia sesión en Docker (solo si es necesario empujar la imagen)
                     // Se recomienda usar credenciales de Jenkins para esto.
-                    withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                         sh """
                             docker login -u \$DOCKER_USERNAME -p \$DOCKER_PASSWORD
                         """
