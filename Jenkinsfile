@@ -2,7 +2,6 @@ pipeline {
     agent any  // Utiliza un agente genérico; cámbialo si es necesario
 
     environment {
-        // Configuración del entorno
         DOCKER_CLI_EXPERIMENTAL = 'enabled'
         IMAGE_NAME = 'mi-imagen'  // Nombre de la imagen Docker
         DOCKER_REGISTRY = 'docker.io'  // Registro Docker, puedes usar Docker Hub u otro
@@ -27,12 +26,12 @@ pipeline {
         stage('Construir Imagen') {
             steps {
                 script {
-                    // Construcción de la imagen Docker con soporte multi-plataforma
+                    // Construcción de la imagen Docker con soporte multi-plataforma y push al registro
                     sh """
-                        docker buildx build --platform linux/amd64,linux/arm64 -t $DOCKER_REGISTRY/$IMAGE_NAME:$DOCKER_TAG .
+                        docker buildx build --platform linux/amd64,linux/arm64 -t $DOCKER_REGISTRY/$IMAGE_NAME:$DOCKER_TAG --push .
                     """
                 }
-                echo 'Imagen construida...'
+                echo 'Imagen construida y subida al registro...'
             }
         }
 
@@ -46,21 +45,6 @@ pipeline {
                         """
                     }
                 }
-            }
-        }
-
-        stage('Empujar Imagen a Registro') {
-            when {
-                branch 'main'  // Solo empuja en la rama 'main'
-            }
-            steps {
-                script {
-                    // Empuja la imagen construida al registro Docker
-                    sh """
-                        docker push $DOCKER_REGISTRY/$IMAGE_NAME:$DOCKER_TAG
-                    """
-                }
-                echo 'Imagen empujada al registro...'
             }
         }
 
