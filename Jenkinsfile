@@ -49,6 +49,18 @@ pipeline {
             }
         }
 
+        stage('Ejecutar Script y Generar Informe') {
+            steps {
+                script {
+                    // Ejecutar el script 'entrypoint.sh' dentro del contenedor
+                    sh """
+                        docker run --rm $DOCKER_REGISTRY/$IMAGE_NAME:$DOCKER_TAG /usr/local/bin/entrypoint.sh
+                    """
+                }
+                echo 'Informe generado...'
+            }
+        }
+
         stage('Empujar Imagen a Registro') {
             when {
                 branch 'main'  // Solo empuja en la rama 'main'
@@ -84,3 +96,4 @@ pipeline {
         }
     }
 }
+
